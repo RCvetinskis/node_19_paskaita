@@ -18,59 +18,6 @@ mongoose.connect(process.env.MONGO_KEY)
 
 const io = socket(http, { cors: { origin: "http://localhost:3000" } })
 
-//  padaryti FRONT END JOG GALIMA PASIRINKT KURIAM USERIUI ZINUTE SIUSI
-
-
-let admin_id
-const users = []
-
-
-io.on("connection", (socket) => {
-
-    socket.on("admin_login", () => {
-        admin_id = socket.id
-
-
-    })
-
-    socket.on("user_login", () => {
-        users.push({ id: socket.id, messages: [] })
-    })
-    socket.on("message_to_admin", (message) => {
-
-        const userIndex = users.findIndex(x => x.id === socket.id)
-
-        users[userIndex].messages.push({
-            message,
-            sender: socket.id
-        })
-
-
-        io.to(admin_id).to(users[userIndex].id).emit("display_users_objects", users)
-
-        //   io.to(users[userIndex].id).to( admin_id ).emit("display_admin_messages", users[userIndex])
-
-    })
-
-    socket.on("message_from_admin", (message, sender) => {
-        const userIndex = users.findIndex(x => x.id === sender)
-        users[userIndex].messages.push({
-            message,
-            sender: "admin"
-        })
-        console.log(users);
-        io.to(sender).to(admin_id).emit("display_admin_messages", users)
-    })
-
-
-
-})
-
-
-
-
-
-
 
 http.listen(4000)
 app.use(express.json())
@@ -90,3 +37,60 @@ app.use(session({
 
 
 app.use("/", mainRouter)
+
+//  padaryti FRONT END JOG GALIMA PASIRINKT KURIAM USERIUI ZINUTE SIUSI
+
+
+let admin_id = null
+let chats = []
+const maxLength = 5
+io.on("connection", (socket) => {
+    socket.emit("space_left", maxLength - chats.length)
+    socket.on("admin_login", () =>  admin_id = socket.id )
+
+    socket.on("user_login", (data) => { 
+        const newChat = {
+            id: socket.id,
+            messages: [] ,
+            username: data.username,
+            color: data.color
+        }
+        chats.push(newChat)
+        io.to(admin_id).emit("chats", chats)
+        socket.emit("chat", newChat)
+    })
+    socket.on("message", (data) => {
+        console.log(data);
+        const admin = admin_id === socket.id
+        const chatIndex = chats.findIndex(x => x.id === data.id)
+
+        const now = new Date();
+        const current = now.getHours() + ':' + now.getMinutes();
+
+       let msg ={
+        from: admin ? "admin" : chats[chatIndex].username,
+        value: data.message,
+        time: current
+       }
+       chats[chatIndex].messages.push(msg)
+
+        io.to(admin_id).emit("chats", chats)
+        io.to(data.id).emit("chat", chats[chatIndex])
+
+    })
+
+    socket.on("disconnect", ()=>{
+        chats = chats.filter(x => x.id !== socket.id)
+        io.to(admin_id).emit("chats", chats)
+    })
+
+
+
+
+})
+
+
+
+
+
+
